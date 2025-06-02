@@ -72,30 +72,7 @@ jobs:
             type=ref,event=tag
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build image for scanning
-        id: build-for-scan
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: false
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: |
-            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
-            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }}
-          outputs: type=docker
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          severity: CRITICAL,HIGH
-          cache-dir: ${{ github.workspace }}/.cache/trivy
-
-      - name: Push cache to DockerHub
+      - name: Build and export cache to DockerHub
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -111,8 +88,18 @@ jobs:
           cache-to: |
             type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
             type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }},mode=max
+          outputs: type=registry,push=false
 
-      - name: Push final image to GHCR
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Build and push final image to GHCR
         uses: docker/build-push-action@v5
         if: github.event_name != 'pull_request'
         with:
