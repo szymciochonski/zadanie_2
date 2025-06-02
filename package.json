@@ -9,9 +9,9 @@
   "author": "Szymon Ciechonski",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.9.0",
+    "axios": "^1.7.7",
     "ejs": "^3.1.10",
-    "express": "^4.21.2",
-    "cross-spawn": "^7.0.3"
+    "express": "^4.21.2"
+
   }
 }
