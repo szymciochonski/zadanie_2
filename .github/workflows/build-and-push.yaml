@@ -1,11 +1,13 @@
 name: Build and Push Multi-Arch Image to GHCR
 
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*.*.*'
   pull_request:
     branches:
       - main
@@ -20,9 +22,11 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+        
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,7 +97,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           format: table
           exit-code: '1'
           severity: CRITICAL,HIGH
@@ -101,7 +105,7 @@ jobs:
 
       - name: Build and push final image to GHCR
         uses: docker/build-push-action@v5
-        if: github.event_name != 'pull_request'
+        if: success()
         with:
           context: .
           file: ./Dockerfile
