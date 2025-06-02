@@ -9,13 +9,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   DOCKERHUB_REGISTRY: docker.io
   DOCKERHUB_CACHE_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/cache
-  CACHE_DATE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.date.outputs.date || github.sha }}
 
 jobs:
   build-and-push:
@@ -30,6 +30,15 @@ jobs:
       - name: Get current date
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Set cache date
+        id: cache-date
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "cache_date=${{ steps.date.outputs.date }}" >> $GITHUB_OUTPUT
+          else
+            echo "cache_date=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -61,9 +70,9 @@ jobs:
           tags: |
             type=sha,prefix=
             type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push cache to DockerHub
+      - name: Build and export cache to DockerHub
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -71,10 +80,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ env.CACHE_DATE }}
-            ${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ env.CACHE_DATE }}
-          cache-from: type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ env.CACHE_DATE }},ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ env.CACHE_DATE }}
-          cache-to: type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ env.CACHE_DATE }},ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ env.CACHE_DATE }},mode=max
+            ${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
+            ${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }}
+          cache-from: |
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }}
+          cache-to: |
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }},mode=max
           outputs: type=registry,push=false
 
       - name: Run Trivy vulnerability scanner
@@ -96,5 +109,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ env.CACHE_DATE }},ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ env.CACHE_DATE }}
-          cache-to: type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ env.CACHE_DATE }},ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ env.CACHE_DATE }},mode=max
+          cache-from: |
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }}
+          cache-to: |
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-amd64-${{ steps.cache-date.outputs.cache_date }}
+            type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-arm64-${{ steps.cache-date.outputs.cache_date }},mode=max
